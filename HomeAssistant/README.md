@@ -63,14 +63,14 @@ Message | Description
     
 ### Bleep
 The active buzzer can be used by HA to send general notifications, in any combination of durations and number of pulses.    
-Format of the payload:  `"AxB.B.B..."`
-Where
-    A:  Number of repititions. Single digit (only), i.e. range 1-9
-    B:  Duration of bleep. Value is multiplied with the "BleepTimeOn" constant.
-        1 = short, 2 = longer, etc. 9999 max value.
-
-Topic: `all/notify/bleep`
+Format of the payload:  `"AxB.B.B..."`    
+Where    
+    A:  Number of repititions. Single digit (only), i.e. range 1-9    
+    B:  Duration of bleep. Value is multiplied with the "BleepTimeOn" constant.    
+        1 = short, 2 = longer, etc. 9999 max value.    
     
+Topic: `all/notify/bleep`    
+        
 Payload | Description
 -- | --
 `1x1.0.1.2.1`           | one times: beep-silent-beep-beeeep-beep
