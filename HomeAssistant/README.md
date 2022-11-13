@@ -1,89 +1,40 @@
 # Home Assistant
 
-This document contains notes on the related components and functionality I added to [Home Assistant](https://www.home-assistant.io/) (HA).    
+Below are some notes on the related components and functionality I added to [Home Assistant](https://www.home-assistant.io/) (HA).    
 
 Note that    
-- in HA there are multiple ways to do things, and what is described below may not be the best way, or may be outdated by the time I finish writing as HA is evolving all the time.
+- in HA there are multiple ways to do things, and what is described here may not be the best way, or may be outdated by the time I finished writing as HA is evolving all the time.
 - the examples below are from my HA implementation, containing my Entity and object names. You may want to adjust these to fit your own implementation. 
 - I will just cover the basics, if you need more information on how to do things please visit the [HA Documentation](https://www.home-assistant.io/docs/) or [HA Forum](https://community.home-assistant.io/). 
     
-    
-## MQTT
-Using the `"mqtt.publish"` service, the following commands can be send:
-    
-### Motor Actions
-Below is a list of MQTT *commands* that control the blinds:    
-    
-Topic: `livingroom/blinds/action`
-    
-Payload | Description
--- | --
-open | Open blinds fully
-open:50 | Open the blinds to the indicated percentage. (e.g. 50%)
-close | Close the blinds if not already closed.
-stop | Stop the blinds if the motor is currently running.
-
-### App Commands
-Below is a list of MQTT *commands* that control the behaviour of the ESP32:    
-    
-Topic: `livingroom/blinds/appcmd`
-    
-Payload | Description
--- | --
-`restart`      | Restart ESP32
-`getstate`     | Report the current state and telemetry values (RSSI, Memory, ..)
-`getconfig`    | Report the current application configuration
-`StateInterval:<minutes>`   | Set the interval between state updates (0 = disabled)
-`LuxInterval:<minutes>`     | Set the interval between Lux updates (0 = disabled)
-`TempInterval:<minutes>`    | Set the interval between Temperature updates (0 = disabled)
-`RotationLimits:<true/false>`     | Set if blinds is considered open/closed on rotations (true) or at limit switches (false) 
-`DebounceDurSwitches:<mseconds>`  | Set the debounce time for Buttons and Limit switches (milliseconds)
-`DebounceDurMotor:<mseconds>`     | Set the debounce time for the motor rotation switch (milliseconds)
-`OpenDuration:<seconds>`          | Set max duration the motor will run when OPENING the blinds (0 = check and timer disabled)
-`MaxRunDuration:<seconds>`        | Set max duration the motor may run in ANY direction (0 = check and timer disabled)
-`MaxOpenRotations:<count>`        | Set max number of axis rotations that blinds can open (0 = disabled)
-`MinLuxReportDelta:<lux>`         | Set the minimum difference in Lux level before publishing MQTT (0 = no threshold, interval only)
-`MaxCurrentLimit:<value>`         | Set max load current motor is allowed to draw (raw analog value) (0 = disabled)
-`AllowRemoteControl:<true/false>` | Set control Blinds using MQTT (true), else (false)
-`AllowRemoteBleep:<true/false>`   | Set if Bleep notifications must be processed (true) or ignored (false)
-`WiFiSetup:SSID/password`         | Set the SSID and password to be used ("default" for defaults)
-    
-### Published Messages
-Below is a list of MQTT messages published by the ESP32:    
-    
-Message | Description
--- | --
-`livingroom/blinds/state`      | Current Blinds state (open/closed + %)
-`livingroom/blinds/config`     | Configuration settings (JSON settings)
-`livingroom/blinds/app_state`  | Telemetry metrics (JSON parameters)
-`livingroom/lux/state`         | Current Lux reading
-`livingroom/temperature/state` | Current temperate reading
-`livingroom/humidity/state`    | Current humidity reading
-
-    
-### Bleep
-The active buzzer can be used by HA to send general notifications, in any combination of durations and number of pulses.    
-Format of the payload:  `"AxB.B.B..."`    
-Where    
-    A:  Number of repititions. Single digit (only), i.e. range 1-9    
-    B:  Duration of bleep. Value is multiplied with the "BleepTimeOn" constant.    
-        1 = short, 2 = longer, etc. 9999 max value.    
-    
-Topic: `all/notify/bleep`    
-        
-Payload | Description
--- | --
-`1x1.0.1.2.1`           | one times: beep-silent-beep-beeeep-beep
-`2x1.1.1.3.3.3.1.1.1`   | repeat SOS twice
-
 <br>
+    
+## 1. "Configuration Attributes" Sensor
+Define the sensor that will extract the attributes from the JSON message received from the Blinds controller.
+Put the following in the HA `configuration.yaml`
 
-## 1. Automations Examples
+```
+mqtt:
+  sensor:
+    - name: 'BlindsController Config'
+      unique_id: blindscontrollerconfig01
+      state_topic: 'livingroom/blinds/config'
+      json_attributes_topic: 'livingroom/blinds/config'
+      value_template: '{{ value_json.MaxOpenRotations }}'
+      device: 
+        identifiers:
+          - BLINDSCONTROLLER
+
+```
+
+## 2. Automation Scripts Examples
 
 ### Open Blinds 
-Open the blinds if one of the following happens, and the blinds are still in the "0" position (closed):
+Open the blinds to 50% if whichever one of the following happens first:
 1. light level rises above 20
 2. it is 8am
+The blinds will only be opened if it is still in the "0" position (closed), and it is after 7am and before 12pm.
+The automation will then publish a message to my phone (`mobile_app_<myphone>`) 30 seconds later to confirm the new blinds position.
 
 ```
 alias: Livingroom Blinds open in morning
@@ -98,16 +49,30 @@ condition:
   - condition: numeric_state
     entity_id: sensor.livingroom_blinds_position
     below: 1
+  - condition: time
+    after: "07:00:00"
+    before: "12:00:00"
 action:
   - service: mqtt.publish
     data:
-      payload: open:40
+      payload: open:50
       topic: livingroom/blinds/action
+  - delay: 30
+  - service: notify.mobile_app_<myphone>
+    data:
+      title: Home Blinds Change
+      message: >-
+        "The blinds are OPENING.. Current: {% if
+        is_state('sensor.livingroom_blinds_position', '0') %}closed{% else
+        %}open{% endif %}! ( {{states.sensor.livingroom_blinds_position.state }}
+        )"
 mode: single
 ```
 
 ### Close Blinds 
-Close the blinds if the light level falls below 60, and the blinds are still in the "0" position (closed):
+Close the blinds if the light level falls below a certain level. This will only be done if the blinds are not already in the "0" position (closed), and if it is after 4pm and before midnight. This is to prevent that in certain conditions the blinds are closed during wrong times of the day when e.g. a cloud blocks the sunlight.
+I make use of a helper entity (`input_number.threshold_light_inside`) to make the threshold level when the blinds will be closed, configurable from the UI.
+The automation will then publish a message to my phone (`mobile_app_<myphone>`) 30 seconds later to confirm the new blinds position.
 
 ```
 alias: Livingroom Blinds close when dark
@@ -115,20 +80,136 @@ description: ""
 trigger:
   - platform: numeric_state
     entity_id: sensor.livingroom_light_level
-    below: 60
+    below: input_number.threshold_light_inside
+    enabled: true
+  - platform: template
+    value_template: >-
+      value_template: "{{ states('sensor.livingroom_light_level')|int <
+      states('input_number.threshold_blinds')|int }}"
+    alias: When light level falls below Threshold_Blinds
 condition:
   - condition: numeric_state
     entity_id: sensor.livingroom_blinds_position
     above: 0
+  - condition: time
+    after: "16:00:00"
+    before: "23:59:59"
+    alias: After 4pm and before midnight
 action:
   - service: mqtt.publish
     data:
       topic: livingroom/blinds/action
       payload: close
+    alias: Publish MQTT to close Blinds
+  - delay: 30
+  - service: notify.mobile_app_<myphone>
+    data:
+      title: Home Blinds Change
+      message: >-
+        "The blinds are CLOSING.. Current: {% if
+        is_state('sensor.livingroom_blinds_position', '0') %}closed{% else
+        %}open{% endif %}! ( {{states.sensor.livingroom_blinds_position.state }}
+        )"
 mode: single
 ```
 
-## 2. Buttons Example
+
+## 3. Display States, and Configuration Attributes
+Below is the JSON to set up 
+1. an entity card to display the current status of the sensors.
+2. an entity card that will display the configuration attributes that were last reported. 
+
+```
+type: vertical-stack
+cards:
+  - type: entities
+    title: Controller States
+    entities:
+      - entity: binary_sensor.livingroom_blinds
+        icon: hass:blinds
+      - entity: sensor.livingroom_blinds_position
+        icon: hass:blinds-open
+      - entity: sensor.livingroom_temperature
+      - entity: sensor.livingroom_humidity
+      - entity: sensor.livingroom_light_level
+  - type: entities
+    title: Controller Configuration
+    show_header_toggle: false
+    entities:
+      - type: attribute
+        entity: sensor.livingroom_blinds_config
+        attribute: AllowRemoteControl
+        name: Allow Remote Control
+        icon: mdi:clock-time-ten-outline
+      - type: attribute
+        entity: sensor.livingroom_blinds_config
+        attribute: AllowRemoteBleep
+        name: Allow Remote Bleep
+        icon: mdi:clock-time-ten-outline
+      - type: attribute
+        entity: sensor.livingroom_blinds_config
+        attribute: MinLuxReportDelta
+        name: Minimum Lux Delta
+        icon: mdi:clock-time-ten-outline
+      - type: attribute
+        entity: sensor.livingroom_blinds_config
+        attribute: LuxInterval
+        name: Lux Interval
+        icon: mdi:clock-time-ten-outline
+      - type: attribute
+        entity: sensor.livingroom_blinds_config
+        attribute: TempInterval
+        name: Temperature Interval
+        icon: mdi:clock-time-ten-outline
+      - type: attribute
+        entity: sensor.livingroom_blinds_config
+        attribute: StateInterval
+        name: State Interval
+        icon: mdi:clock-time-ten-outline
+      - type: attribute
+        entity: sensor.livingroom_blinds_config
+        attribute: DebounceDurSwitches
+        name: Debounce Duration - Switches
+        icon: mdi:clock-time-ten-outline
+      - type: attribute
+        entity: sensor.livingroom_blinds_config
+        attribute: DebounceDurMotor
+        name: Debounce Duration - Motor
+        icon: mdi:clock-time-ten-outline
+      - type: attribute
+        entity: sensor.livingroom_blinds_config
+        attribute: RotationLimits
+        name: Rotation Limits
+        icon: mdi:clock-time-ten-outline
+      - type: attribute
+        entity: sensor.livingroom_blinds_config
+        attribute: OpenDuration
+        name: Open Duration
+        icon: mdi:clock-time-ten-outline
+      - type: attribute
+        entity: sensor.livingroom_blinds_config
+        attribute: MaxOpenRotations
+        name: Max Open Rotations
+        icon: mdi:clock-time-ten-outline
+      - type: attribute
+        entity: sensor.livingroom_blinds_config
+        attribute: MaxCurrentLimit
+        name: Max Current Limit
+        icon: mdi:clock-time-ten-outline
+      - type: attribute
+        entity: sensor.livingroom_blinds_config
+        attribute: MaxRunDuration
+        name: Max Run Duration
+        icon: mdi:clock-time-ten-outline
+      - type: attribute
+        entity: sensor.livingroom_blinds_config
+        attribute: SSID
+        name: SSID
+        icon: mdi:clock-time-ten-outline
+
+```
+
+## 4. Buttons Example
 To help you get going, below is a couple of buttons to send various commands to the Blinds Controller, and to show the status of some of the sensors. 
 
 ```
@@ -300,13 +381,4 @@ cards:
             payload: TempInterval:1
       - type: custom:button-card
         color_type: blank-card
-  - type: entities
-    entities:
-      - entity: binary_sensor.livingroom_blinds
-        icon: hass:blinds
-      - entity: sensor.livingroom_blinds_position
-        icon: hass:blinds-open
-      - entity: sensor.livingroom_temperature
-      - entity: sensor.livingroom_humidity
-      - entity: sensor.livingroom_light_level
 ```
