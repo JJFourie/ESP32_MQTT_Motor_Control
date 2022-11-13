@@ -46,10 +46,10 @@ Topic: `livingroom/blinds/action`
     
 Payload | Description
 -- | --
-open | Open blinds fully
-open:50 | Open the blinds to the indicated percentage. (e.g. 50%)
-close | Close the blinds if not already closed.
-stop | Stop the blinds if the motor is currently running.
+`open` | Open blinds fully
+`open:50` | Open the blinds to the indicated percentage. (e.g. 50%)
+`close` | Close the blinds if not already closed.
+`stop` | Stop the blinds if the motor is currently running.
 
 ### App Configuration Commands
 Below is a list of MQTT *commands* that control the behaviour of the ESP32:    
@@ -134,8 +134,8 @@ Switch | Reed | Full Close position |  18
 Switch | Reed | Full Open position |  19
 Switch | Slipring contact| Motor rotation |  13
 I2C | [TSL2561](https://learn.adafruit.com/tsl2561) | Luminosity (Lux) | 21 (SDA) <br>  22 (SCL)
-I2C | [AM2320](https://datasheets.maximintegrated.com/en/ds/DS18B20.pdf). Optional | Temperature & Humidity |  21 (SDA) <br>  22 (SCL) 
-DO | [Active Buzzer]() | Beeps when error, MQTT msg (from HA)  5
+I2C | [AM2320](https://datasheets.maximintegrated.com/en/ds/DS18B20.pdf) | Temperature & Humidity. Optional |  21 (SDA) <br>  22 (SCL) 
+DO | [Active Buzzer]() | Beeps when error, MQTT msg (from HA)  |  5
 IBT-2 | PWM | Clock pulses to determine rotation speed |  25 (Right PWM) <br> 26 (Left PWM)
 IBT-2 | EN | Enables rotation in a specific direction |  14 (Right Enable) <br> 27 (Left Enable) 
 IBT-2 | Current sensor | Protects motor driver from over current |  32
@@ -145,17 +145,17 @@ IBT-2 | Current sensor | Protects motor driver from over current |  32
 Remarks on some aspects of the design:    
    1. **Wiper Motor**    
       I chose for a wiper motor because the blinds I wanted to control are rather heavy, and are of the type that must be pulled up with a cord when opened (i.e. not slats that can be rotated). The gear mechanism of a wiper motor is designed to prevent the wind from moving the wipers while driving. This means that the motor can turn the output axle, but the axle can't turn the motor. This behaviour comes in very handy in this case, as no additional breaking mechanism was necessary to lock the blinds when in the open position.    
-      **NOTE** that some rear wiper motors have a mechanism that causes the output axle to only rotate through 180 degrees instead of the desired full 360 degree rotations!
+      **NOTE** that some rear wiper motors have a mechanism that causes the output axle to only rotate through 180 degrees instead of the desired full 360 degree rotations!    
    2. **Rotation Monitoring**    
       Another advantage of (all?) wiper motors is that they have slip rings that allow the car electronics to know when the blinds are in the "close" position. This mechanism enables us to detect and count the motor rotations in order to keep track of the position of the blinds. In my case I had to open the gear housing and remove one of the slip ring connections, as it made a short to the 12V slip ring for a short period while the motor was running. After removing this connector it was possible to simply connect the remaining connector to a GPIO pin, and monitor when it is pulled down to ground to indicate one axle rotation. In my case this connector bounces for quite a long time during rotations, so (software?) debouncing is essential.    
       An alternative to using the internal wiper motor sliprings and connector could be to e.g. put a very small neodymium magnet on the motor axle, and then use a hall-effect transistor to detect rotations.    
-            Note that monitoring the motor rotations is not essential to the design. It just provides a nice and easy way to know where the blinds are, and thus to posision the blinds much more flexibly than when using fixed limit switches.
+            Note that monitoring the motor rotations is not essential to the design. It just provides a nice and easy way to know where the blinds are, and thus to posision the blinds much more flexibly than when using fixed limit switches.    
    3. **Momentary rocker switch**    
       The idea was to make it possible to open/close the blinds manually using push buttons, as it just could happen that a phone/laptop/HA client is not at hand at the moment you stand in front of the window, and it would be just so much easier to press a button to quickly manage the blinds. This also makes it possible to open/close the blinds when you have a system outtage (of course this is something that will never happen..).    
       By adding a double-throw momentary rocker switch it becomes easy to move the blinds in the desired direction for as long as the button is pressed. A la electric car windows!    
-      Just be sure to use quality buttons, and/or properly debounce them, as else you will not be able to use ESP32 interrupts on the GPIO pins to detect button changes. The related code can then also be cleaned up considerably.
+      Just be sure to use quality buttons, and/or properly debounce them, as else you will not be able to use ESP32 interrupts on the GPIO pins to detect button changes. The related code can then also be cleaned up considerably.    
    4. **Output Gear**    
-      To connect the blinds pull cord to the wiper motor I used a [3D printer timing belt gear](https://www.google.com/search?q=3d+printer+drive+belt+gear&tbm=isch&ved=2ahUKEwiUocK_5-T6AhVNOewKHXt2BAQQ2-cCegQIABAA&oq=3d+printer+drive+belt+gear&gs_lcp=CgNpbWcQAzoHCAAQgAQQGFDMDlifFGCGFmgAcAB4AIABbIgBggOSAQM1LjGYAQCgAQGqAQtnd3Mtd2l6LWltZ8ABAQ&sclient=img&ei=2QBMY9TQBc3ysAf77JEg&bih=703&biw=1536). I drilled two "dimpels" into the wiper motor axle for the grub screws of the gear. The gear's splines provide sufficient grip for the cord to not slip when the blinds are open(ed).
+      To connect the blinds pull cord to the wiper motor I used a [3D printer timing belt gear](https://www.google.com/search?q=3d+printer+drive+belt+gear&tbm=isch&ved=2ahUKEwiUocK_5-T6AhVNOewKHXt2BAQQ2-cCegQIABAA&oq=3d+printer+drive+belt+gear&gs_lcp=CgNpbWcQAzoHCAAQgAQQGFDMDlifFGCGFmgAcAB4AIABbIgBggOSAQM1LjGYAQCgAQGqAQtnd3Mtd2l6LWltZ8ABAQ&sclient=img&ei=2QBMY9TQBc3ysAf77JEg&bih=703&biw=1536). I drilled two "dimpels" into the wiper motor axle for the grub screws of the gear to take hold. The gear's splines provide sufficient grip for the cord to not slip when the blinds are open(ed).
 
 
 #### Wire Diagram
